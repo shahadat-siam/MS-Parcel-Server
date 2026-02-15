@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const admin = require("firebase-admin");
 
 const stripe = require('stripe')(process.env.PAYMENT_GETWAY_KEY)
 
@@ -11,6 +12,14 @@ const port = process.env.PORT || 5000;
 /* ---------- Middleware ---------- */
 app.use(cors());
 app.use(express.json());
+ 
+
+const serviceAccount = require("./firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ot34xl4.mongodb.net/?appName=Cluster0`;
 
@@ -33,6 +42,28 @@ async function run() {
     const parcelCollection = db.collection("parcels");
     const paymentCollection = db.collection("payments")
 
+    // Middlewere
+    const verifyFBToken = async (req, res, next) => {
+      // console.log(req.headers)
+      const authHeader = req.headers.authorization
+      if(!authHeader) {
+        return res.status(401).send({message: 'Unauthorized access'})
+      }
+      const token = authHeader.split(' ')[1]
+      if(!token) {
+        return res.status(401).send({message: 'Unauthorized access'})
+      }
+
+      // verify the token
+      try{
+        const decoded = await admin.auth().verifyIdToken(token)
+        req.decoded = decoded
+        next()
+      } catch (error) {
+         return res.status(403).send({message: 'Forbidden access'})
+      } 
+    }
+
     app.post('/users', async(req, res) => {
       const email = req.body.email
       const userExists = await userCollection.findOne({email})
@@ -44,13 +75,13 @@ async function run() {
       res.send(result)
     })
 
-    app.get("/parcels", async (req, res) => {
+    app.get("/parcels", verifyFBToken, async (req, res) => {
       const parcels = await parcelCollection.find().toArray();
       res.send(parcels);
     });
 
     // get my parcels by email
-    app.get("/parcel", async (req, res) => {
+    app.get("/parcel",verifyFBToken, async (req, res) => {
       try {
         const userEmail = req.query.email; // get email from query
         const query = userEmail ? { create_by: userEmail } : {}; // filter by email if provided
@@ -67,7 +98,7 @@ async function run() {
     });
 
     // get a parcel info by id
-    app.get('/parcels/:id', async (req, res) => {
+    app.get('/parcels/:id', verifyFBToken, async (req, res) => {
        try{
         const id = req.params.id;
         // console.log('ID', id)
@@ -99,9 +130,12 @@ async function run() {
     })
 
     // get payment record
-    app.get('/payments', async(req, res) => {
+    app.get('/payments', verifyFBToken, async(req, res) => {
       try{
         const userEmail = req.query.email
+        if(req.decoded.email !== userEmail){
+          return res.status(403).send({message: 'Forbidden access'})
+        }
         const query = userEmail ? {email: userEmail}: {}
         const options = {sort: {paid_at: -1}}
 
