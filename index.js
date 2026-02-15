@@ -29,8 +29,20 @@ async function run() {
     await client.connect();
 
     const db = client.db("parcelDB");
+    const userCollection = db.collection("users");
     const parcelCollection = db.collection("parcels");
     const paymentCollection = db.collection("payments")
+
+    app.post('/users', async(req, res) => {
+      const email = req.body.email
+      const userExists = await userCollection.findOne({email})
+      if(userExists){
+        return res.status(200).send({message: 'User Already exists', inserted: false})
+      }
+      const user = req.body
+      const result = await userCollection.insertOne(user);
+      res.send(result)
+    })
 
     app.get("/parcels", async (req, res) => {
       const parcels = await parcelCollection.find().toArray();
@@ -89,7 +101,7 @@ async function run() {
     // get payment record
     app.get('/payments', async(req, res) => {
       try{
-        const userEmail = req.body.email
+        const userEmail = req.query.email
         const query = userEmail ? {email: userEmail}: {}
         const options = {sort: {paid_at: -1}}
 
