@@ -12,7 +12,7 @@ const port = process.env.PORT || 5000;
 /* ---------- Middleware ---------- */
 app.use(cors());
 app.use(express.json());
- 
+
 
 const serviceAccount = require("./firebase-adminsdk.json");
 
@@ -47,29 +47,29 @@ async function run() {
     const verifyFBToken = async (req, res, next) => {
       // console.log(req.headers)
       const authHeader = req.headers.authorization
-      if(!authHeader) {
-        return res.status(401).send({message: 'Unauthorized access'})
+      if (!authHeader) {
+        return res.status(401).send({ message: 'Unauthorized access' })
       }
       const token = authHeader.split(' ')[1]
-      if(!token) {
-        return res.status(401).send({message: 'Unauthorized access'})
+      if (!token) {
+        return res.status(401).send({ message: 'Unauthorized access' })
       }
 
       // verify the token
-      try{
+      try {
         const decoded = await admin.auth().verifyIdToken(token)
         req.decoded = decoded
         next()
       } catch (error) {
-         return res.status(403).send({message: 'Forbidden access'})
-      } 
+        return res.status(403).send({ message: 'Forbidden access' })
+      }
     }
 
-    app.post('/users', async(req, res) => {
+    app.post('/users', async (req, res) => {
       const email = req.body.email
-      const userExists = await userCollection.findOne({email})
-      if(userExists){
-        return res.status(200).send({message: 'User Already exists', inserted: false})
+      const userExists = await userCollection.findOne({ email })
+      if (userExists) {
+        return res.status(200).send({ message: 'User Already exists', inserted: false })
       }
       const user = req.body
       const result = await userCollection.insertOne(user);
@@ -80,17 +80,54 @@ async function run() {
       const rider = req.body
       const result = await ridersCollection.insertOne(rider)
       res.send(result)
-    } )
-
-    app.get('/riders/pending', async (req, res) => {
-      try{
-        const pendingRider = await ridersCollection.find({status: 'pending'}).toArray()
-        res.send(pendingRider)
-      }catch(error) {
-        console.log('failed to get pending rider', error)
-        res.status(500).send({message: 'Failed to get pending riders'})
-      }
     })
+
+    // get all riders by each status
+    app.get('/riders', async (req, res) => {
+      try {
+        const { status } = req.query;
+
+        let query = {};
+
+        if (status) {
+          query.status = status;
+        }
+
+        const riders = await ridersCollection.find(query).toArray();
+
+        res.send(riders);
+      } catch (error) {
+        console.log('Failed to get riders', error);
+        res.status(500).send({ message: 'Failed to get riders' });
+      }
+    });
+
+
+
+    app.patch("/riders/status/:id", async (req, res) => {
+      const id = req.params.id;
+      const { status, email } = req.body;
+      const query = { _id: new ObjectId(id) }
+      const updateDoc = { $set: { status } }
+
+      const result = await ridersCollection.updateOne(
+        query,
+        updateDoc
+      );
+
+      if(status === 'approved') {
+        const userQuery = {email}
+        const userUpdateDoc ={
+          $set: {
+            role: 'rider'
+          }
+        }
+        const roleResult = await userCollection.updateOne(userQuery, userUpdateDoc)
+        res.send(roleResult)
+      }
+
+      res.send(result);
+    });
 
     app.get("/parcels", verifyFBToken, async (req, res) => {
       const parcels = await parcelCollection.find().toArray();
@@ -98,7 +135,7 @@ async function run() {
     });
 
     // get my parcels by email
-    app.get("/parcel",verifyFBToken, async (req, res) => {
+    app.get("/parcel", verifyFBToken, async (req, res) => {
       try {
         const userEmail = req.query.email; // get email from query
         const query = userEmail ? { create_by: userEmail } : {}; // filter by email if provided
@@ -116,64 +153,64 @@ async function run() {
 
     // get a parcel info by id
     app.get('/parcels/:id', verifyFBToken, async (req, res) => {
-       try{
+      try {
         const id = req.params.id;
         // console.log('ID', id)
-        const parcel = await parcelCollection.findOne({_id : new ObjectId(id)})
-        
-        if(!parcel) {
-          return res.status(404).send({message: "Parcel Not Found"})
+        const parcel = await parcelCollection.findOne({ _id: new ObjectId(id) })
+
+        if (!parcel) {
+          return res.status(404).send({ message: "Parcel Not Found" })
         }
         res.send(parcel)
-      }catch(error) {
+      } catch (error) {
         console.log("Error featching parcel", error)
-        res.status(500).send({message: "Failed to fatching parcel"})
+        res.status(500).send({ message: "Failed to fatching parcel" })
       }
     })
 
     // payment intent
     app.post('/create-payment-intent', async (req, res) => {
       const paymentInCents = req.body.paymentInCents
-       try{
-        const paymentIntent = await  stripe.paymentIntents.create({
-        amount: paymentInCents, // amount in cents
-        currency: 'usd',
-        payment_method_types: ['card'],
-      })
-      res.json({clientSecret: paymentIntent.client_secret})
-       } catch (error) {
-        res.status(500).json({error: error.message})
-       }
+      try {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: paymentInCents, // amount in cents
+          currency: 'usd',
+          payment_method_types: ['card'],
+        })
+        res.json({ clientSecret: paymentIntent.client_secret })
+      } catch (error) {
+        res.status(500).json({ error: error.message })
+      }
     })
 
     // get payment record
-    app.get('/payments', verifyFBToken, async(req, res) => {
-      try{
+    app.get('/payments', verifyFBToken, async (req, res) => {
+      try {
         const userEmail = req.query.email
-        if(req.decoded.email !== userEmail){
-          return res.status(403).send({message: 'Forbidden access'})
+        if (req.decoded.email !== userEmail) {
+          return res.status(403).send({ message: 'Forbidden access' })
         }
-        const query = userEmail ? {email: userEmail}: {}
-        const options = {sort: {paid_at: -1}}
+        const query = userEmail ? { email: userEmail } : {}
+        const options = { sort: { paid_at: -1 } }
 
         const payment = await paymentCollection.find(query, options).toArray()
         res.send(payment)
-      } catch(error) {
+      } catch (error) {
         console.log('error fatching payment history', error)
-        res.status(500).send({message: 'Failed to get payment'})
+        res.status(500).send({ message: 'Failed to get payment' })
       }
     })
 
     app.post('/payment', async (req, res) => {
-      try{
-        const {id, email, amount, paymentMethod, transactionId} = req.body
+      try {
+        const { id, email, amount, paymentMethod, transactionId } = req.body
         // update parcel payment status
         const updateResult = await parcelCollection.updateOne(
-          {_id: new ObjectId(id)},
-          {$set: {payment_status: 'paid'}}
+          { _id: new ObjectId(id) },
+          { $set: { payment_status: 'paid' } }
         )
-        if(updateResult.modifiedCount === 0) {
-          return res.status(404).send({message: 'Parcel not found or already paid '})
+        if (updateResult.modifiedCount === 0) {
+          return res.status(404).send({ message: 'Parcel not found or already paid ' })
         }
 
         // insert payment record
@@ -182,13 +219,13 @@ async function run() {
         }
         const paymentResult = await paymentCollection.insertOne(paymentDoc)
         res.status(201).send({
-          message:'Payment recorded & parcel marked as paid',
+          message: 'Payment recorded & parcel marked as paid',
           insertedId: paymentResult.insertedId
-        })  
-      } catch(error) {
-         console.error('Payment process failed', error.message)
-         res.status(500).send({message: 'Failed to record payment'}) 
-        }
+        })
+      } catch (error) {
+        console.error('Payment process failed', error.message)
+        res.status(500).send({ message: 'Failed to record payment' })
+      }
     })
 
 
