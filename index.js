@@ -41,6 +41,7 @@ async function run() {
     const userCollection = db.collection("users");
     const parcelCollection = db.collection("parcels");
     const paymentCollection = db.collection("payments")
+    const ridersCollection = db.collection("riders")
 
     // Middlewere
     const verifyFBToken = async (req, res, next) => {
@@ -73,6 +74,22 @@ async function run() {
       const user = req.body
       const result = await userCollection.insertOne(user);
       res.send(result)
+    })
+
+    app.post('/rider', async (req, res) => {
+      const rider = req.body
+      const result = await ridersCollection.insertOne(rider)
+      res.send(result)
+    } )
+
+    app.get('/riders/pending', async (req, res) => {
+      try{
+        const pendingRider = await ridersCollection.find({status: 'pending'}).toArray()
+        res.send(pendingRider)
+      }catch(error) {
+        console.log('failed to get pending rider', error)
+        res.status(500).send({message: 'Failed to get pending riders'})
+      }
     })
 
     app.get("/parcels", verifyFBToken, async (req, res) => {
