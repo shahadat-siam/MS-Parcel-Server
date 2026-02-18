@@ -82,6 +82,31 @@ async function run() {
       res.send(result)
     })
 
+    // get user for role update
+    app.get('/users/search', async (req, res) => {
+      try {
+        const { email } = req.query;
+
+        if (!email) {
+          return res.status(400).send({ message: 'Email is required' });
+        }
+
+        const user = await userCollection.findOne(
+          { email },
+          { projection: { email: 1, createdAt: 1, role: 1 } }
+        );
+
+        if (!user) {
+          return res.status(404).send({ message: 'User not found' });
+        }
+
+        res.send(user);
+      } catch (error) {
+        res.status(500).send({ message: 'Server error' });
+      }
+    });
+
+
     // get all riders by each status
     app.get('/riders', async (req, res) => {
       try {
@@ -115,9 +140,9 @@ async function run() {
         updateDoc
       );
 
-      if(status === 'approved') {
-        const userQuery = {email}
-        const userUpdateDoc ={
+      if (status === 'approved') {
+        const userQuery = { email }
+        const userUpdateDoc = {
           $set: {
             role: 'rider'
           }
