@@ -251,16 +251,25 @@ async function run() {
       },
     );
 
-    app.get("/parcels", verifyFBToken, async (req, res) => {
-      const parcels = await parcelCollection.find().toArray();
-      res.send(parcels);
-    });
+    // app.get("/parcels", verifyFBToken, async (req, res) => {
+    //   const parcels = await parcelCollection.find().toArray();
+    //   res.send(parcels);
+    // });
 
     // get my parcels by email
     app.get("/parcel", verifyFBToken, async (req, res) => {
       try {
-        const userEmail = req.query.email; // get email from query
-        const query = userEmail ? { create_by: userEmail } : {}; // filter by email if provided
+        const { email, payment_status, delivery_status } = req.query;
+        let query = {};
+        if (email) {
+          query = { create_by: email };
+        }
+        if (payment_status) {
+          query.payment_status = payment_status;
+        }
+        if (delivery_status) {
+          query.delivery_status = delivery_status;
+        }
         const options = {
           sort: { creation_date: -1 }, // newest first
         };
@@ -329,9 +338,7 @@ async function run() {
     app.post("/payment", verifyFBToken, async (req, res) => {
       try {
         const { id, email, amount, paymentMethod, transactionId } = req.body;
-        if (req.decoded.email !== email) {
-          return res.status(403).send({ message: "Forbidden access" });
-        }
+
         // update parcel payment status
         const updateResult = await parcelCollection.updateOne(
           { _id: new ObjectId(id) },
@@ -390,6 +397,26 @@ async function run() {
           message: "Failed to delete parcel",
         });
       }
+    });
+
+    // GET /riders?district=Dhaka avaiable riders
+    app.get("/availableriders", verifyFBToken, async (req, res) => {
+      const { district } = req.query;
+      console.log(district)
+
+      const query = {
+        role: "rider",
+      };
+
+      if (district) {
+        query.district = district; // 🔥 match sender_center
+      }
+
+      const riders = await userCollection
+        .find(query, { projection: { name: 1, email: 1, district: 1 } })
+        .toArray();
+
+      res.send(riders);
     });
 
     // Send a ping to confirm a successful connection
