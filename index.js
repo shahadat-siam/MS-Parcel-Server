@@ -399,26 +399,41 @@ async function run() {
       }
     });
 
-    // GET /riders?district=Dhaka avaiable riders
+    // GET /availableriders?district=Dhaka
     app.get("/availableriders", verifyFBToken, async (req, res) => {
-      const { district } = req.query;
-      console.log(district)
+      try {
+        const { district } = req.query;
+        console.log("Fetching riders for district:", district);
 
-      const query = {
-        role: "rider",
-      };
+        const query = {
+          status: "approved", // only approved riders
+        };
 
-      if (district) {
-        query.district = district; // 🔥 match sender_center
+        if (district) {
+          query.district = district; // match sender_center district
+        }
+
+        const riders = await ridersCollection
+          .find(query, {
+            projection: {
+              name: 1,
+              email: 1,
+              district: 1,
+              region: 1,
+              phone: 1,
+            },
+          })
+          .toArray();
+
+        console.log("Query:", query);
+        console.log("Found riders:", riders.length);
+
+        res.send(riders);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to get riders" });
       }
-
-      const riders = await userCollection
-        .find(query, { projection: { name: 1, email: 1, district: 1 } })
-        .toArray();
-
-      res.send(riders);
     });
-
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
