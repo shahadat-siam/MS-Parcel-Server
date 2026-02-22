@@ -400,11 +400,10 @@ async function run() {
     });
 
     // GET /availableriders?district=Dhaka
-    app.get("/availableriders", verifyFBToken, async (req, res) => {
+    app.get("/availableriders", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const { district } = req.query;
-        console.log("Fetching riders for district:", district);
-
+        // console.log("Fetching riders for district:", district); 
         const query = {
           status: "approved", // only approved riders
         };
@@ -423,17 +422,36 @@ async function run() {
               phone: 1,
             },
           })
-          .toArray();
-
-        console.log("Query:", query);
-        console.log("Found riders:", riders.length);
-
+          .toArray(); 
+        // console.log("Query:", query);
+        // console.log("Found riders:", riders.length); 
         res.send(riders);
       } catch (error) {
         console.error(error);
         res.status(500).send({ message: "Failed to get riders" });
       }
     });
+
+    // PATCH /parcels/assign-rider/:id
+    app.patch("/parcels/assign-rider/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const { riderId, rider_name, rider_email, rider_phone, delivery_status } = req.body;
+
+      const updateDoc = {
+        $set: {
+          riderId, rider_name, rider_email, rider_phone, delivery_status,
+          assigned_at: new Date(),
+        },
+      };
+
+      const result = await parcelCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc,
+      );
+
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
