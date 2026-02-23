@@ -422,7 +422,7 @@ async function run() {
               phone: 1,
             },
           })
-          .toArray(); 
+          .toArray();
         // console.log("Query:", query);
         // console.log("Found riders:", riders.length); 
         res.send(riders);
@@ -452,68 +452,67 @@ async function run() {
       res.send(result);
     });
 
-    // GET /parcels/pending?rider_email=example@gmail.com
-app.get("/parcels/assigned", verifyFBToken, async (req, res) => {
-  try {
-    const { rider_email } = req.query;
+    // GET rider assigned & on-transit parcels
+    app.get("/allparcel/assigned", verifyFBToken, async (req, res) => {
+      try {
+        const { rider_email } = req.query;
 
-    if (!rider_email) {
-      return res.status(400).send({ message: "rider_email is required" });
-    }
+        if (!rider_email) {
+          return res.status(400).send({ message: "rider_email is required" });
+        }
 
-    // Query for pending delivery parcels assigned to this rider
-    const query = {
-      rider_email: rider_email,
-      delivery_status: { 
-        $in: ["rider-assigned", "on-transit"] 
-      },
-    };
+        const query = {
+          rider_email: rider_email,
+          delivery_status: {
+            $in: ["rider-assigned", "in-transit"],
+          },
+        };
 
-    // Optional: sort by latest created
-    const parcels = await parcelCollection
-      .find(query)
-      .sort({ createdAt: -1 })
-      .toArray();
+        const parcels = await parcelCollection
+          .find(query)
+          .sort({ create_at: -1 })
+          .toArray();
 
-    res.send(parcels);
-  } catch (error) {
-    console.error("Error fetching pending parcels:", error);
-    res.status(500).send({ message: "Failed to get pending parcels" });
-  }
-});
+        res.send(parcels);
+      } catch (error) {
+        console.error("Error fetching pending parcels:", error);
+        res.status(500).send({ message: "Failed to get pending parcels" });
+      }
+    });
 
-app.patch("/parcels/:id/status", verifyFBToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
+    // update parcel status to in transit or delivered
+    app.patch("/parcelride/:id/status", verifyFBToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body;
 
-    // 🔥 CRITICAL FIX
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).send({ message: "Invalid parcel ID" });
-    }
+        // 🔥 CRITICAL FIX
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid parcel ID" });
+        }
 
-    const filter = { _id: new ObjectId(id) };
+        const filter = { _id: new ObjectId(id) };
 
-    const updateDoc = {
-      $set: { delivery_status: status },
-    };
+        const updateDoc = {
+          $set: { delivery_status: status },
+        };
 
-    if (status === "on-transit") {
-      updateDoc.$set.picked_at = new Date();
-    }
+        if (status === "in-transit") {
+          updateDoc.$set.picked_at = new Date();
+        }
 
-    if (status === "delivered") {
-      updateDoc.$set.delivered_at = new Date();
-    }
+        if (status === "delivered") {
+          updateDoc.$set.delivered_at = new Date();
+        }
 
-    const result = await parcelCollection.updateOne(filter, updateDoc);
+        const result = await parcelCollection.updateOne(filter, updateDoc);
 
-    res.send(result);
-  } catch (error) {
-    console.error("Error updating parcel:", error);
-    res.status(500).send({ message: "Server error" });
-  }
-});
+        res.send(result);
+      } catch (error) {
+        console.error("Error updating parcel:", error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
