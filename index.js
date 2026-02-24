@@ -456,7 +456,7 @@ async function run() {
     app.get("/allparcel/assigned", verifyFBToken, async (req, res) => {
       try {
         const { rider_email } = req.query;
-
+        console.log('rider email', rider_email)
         if (!rider_email) {
           return res.status(400).send({ message: "rider_email is required" });
         }
@@ -464,7 +464,7 @@ async function run() {
         const query = {
           rider_email: rider_email,
           delivery_status: {
-            $in: ["rider-assigned", "in-transit"],
+            $in: ["rider_assigned", "in-transit"],
           },
         };
 
