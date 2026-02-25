@@ -587,23 +587,131 @@ async function run() {
       });
     });
 
-    // Request Cashout API
+    // Request Cashout API (Improved)
     app.post("/rider/cashout", verifyFBToken, verifyRider, async (req, res) => {
       const { rider_email, amount } = req.body;
 
-      if (!amount || amount <= 0) {
-        return res.status(400).send({ message: "Invalid amount" });
+      if (!amount || amount < 500) {
+        return res.status(400).send({
+          message: "Minimum cashout amount is 500 TK",
+        });
+      }
+
+      // ❗ Check existing pending request
+      const pendingRequest = await cashoutCollection.findOne({
+        rider_email,
+        status: "pending",
+      });
+
+      if (pendingRequest) {
+        return res.status(400).send({
+          message: "You already have a pending cashout request",
+        });
       }
 
       await cashoutCollection.insertOne({
         rider_email,
         amount,
         requested_at: new Date(),
-        status: "pending"
+        status: "pending",
       });
 
-      res.send({ success: true, message: "Cashout request submitted" });
+      res.send({
+        success: true,
+        message: "Cashout request submitted successfully",
+      });
     });
+
+    // GET Rider Cashout History
+    app.get("/rider/cashouts", verifyFBToken, verifyRider, async (req, res) => {
+      const { rider_email } = req.query;
+
+      const cashouts = await cashoutCollection
+        .find({ rider_email })
+        .sort({ requested_at: -1 })
+        .toArray();
+
+      res.send(cashouts);
+    });
+
+    // PATCH: Update Cashout Status (Approve / Reject) - COMMON API
+    app.patch("/admin/cashouts/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body; // "approved" or "rejected"
+
+        if (!status || !["approved", "rejected"].includes(status)) {
+          return res.status(400).send({
+            message: "Invalid status. Must be 'approved' or 'rejected'",
+          });
+        }
+
+        const cashout = await cashoutCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!cashout) {
+          return res.status(404).send({ message: "Cashout not found" });
+        }
+
+        // ❗ Important Rule: Only pending can be updated
+        if (cashout.status !== "pending") {
+          return res.status(400).send({
+            message: "This cashout request is already processed",
+          });
+        }
+
+        const updateDoc = {
+          status,
+          processed_at: new Date(),
+        };
+
+        if (status === "approved") {
+          updateDoc.approved_at = new Date();
+        }
+
+        if (status === "rejected") {
+          updateDoc.rejected_at = new Date();
+        }
+
+        const result = await cashoutCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateDoc }
+        );
+
+        res.send({
+          success: true,
+          message: `Cashout ${status} successfully`,
+          result,
+        });
+      } catch (error) {
+        console.error("Cashout update error:", error);
+        res.status(500).send({ message: "Failed to update cashout status" });
+      }
+    }
+    );
+
+    // GET all cashout requests (Admin)
+    app.get("/admin/cashouts", verifyFBToken, verifyAdmin, async (req, res) => {
+      try {
+        const { status } = req.query;
+
+        const query = {};
+        if (status && status !== "all") {
+          query.status = status;
+        }
+
+        const cashouts = await cashoutCollection
+          .find(query)
+          .sort({ requested_at: -1 })
+          .toArray();
+
+        res.send(cashouts);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch cashouts" });
+      }
+    }
+    );
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
